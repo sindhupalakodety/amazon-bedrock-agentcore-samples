@@ -16,6 +16,8 @@ Furthermore, observability supports compliance and governance requirements by of
 
 Together, they offer a holistic observability and governance framework for managing AgentCore Gateway in production.
 
+![images/1-agentcore-gw-architecture.png]
+
 #### AgentCore Gateway CloudWatch Metrics
 
 Gateway publishes the following metrics to Amazon CloudWatch. They provide information about about API invocations, performance, and errors.
