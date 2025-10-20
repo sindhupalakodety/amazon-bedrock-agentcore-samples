@@ -127,13 +127,13 @@ In these tutorials we will cover observability of AgentCore Gateway.
 | Information          | Details                                                   |
 |:---------------------|:----------------------------------------------------------|
 | Tutorial type        | Interactive                                               |
-| AgentCore components | AgentCore Gateway, AgentCore Identity, Amazon CloudWatch  |
+| AgentCore components | AgentCore Gateway, Amazon CloudWatch, AWS CloudTrail      |
 | Agentic Framework    | Strands Agents                                            |
 | Gateway Target type  | AWS Lambda                                                |
 | Inbound Auth IdP     | Amazon Cognito                                            |
 | Outbound Auth        | AWS IAM                                                   |
-| LLM model            | Anthropic Claude Sonnet 3.7, Amazon Nova Pro              |
-| Tutorial components  | Creating AgentCore Gateway, Observability using CloudWatch|
+| LLM model            | Anthropic Claude Sonnet 4.0                               |
+| Tutorial components  | AgentCore Gateway Observability with CloudWatch,CloudTrail|
 | Tutorial vertical    | Cross-vertical                                            |
 | Example complexity   | Easy                                                      |
 | SDK used             | boto3                                                     |
