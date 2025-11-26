@@ -15,7 +15,8 @@ def lambda_handler(event, context):
 
     Expected input:
     {
-        "itemId": "ITEM-12345"
+        "itemId": "ITEM-12345",
+        "location": "East Warehouse" (optional)
     }
 
     Returns mock inventory data in camelCase format.
@@ -25,6 +26,7 @@ def lambda_handler(event, context):
     # Parse input
     body = event if isinstance(event, dict) else json.loads(event)
     itemId = body.get('itemId', None)
+    location = body.get('location', None)
 
     if not itemId:
         return {
@@ -44,6 +46,9 @@ def lambda_handler(event, context):
     locations = ['East Warehouse', 'West Warehouse', 'North Warehouse', 
                 'South Warehouse', 'Central Distribution']
     
+    # Use provided location if available, otherwise randomly select one
+    warehouse_location = location if location else random.choice(locations)
+    
     # Generate random date in the last 30 days
     days_ago = random.randint(0, 30)
     update_date = (datetime.utcnow() - timedelta(days=days_ago)).isoformat()
@@ -52,7 +57,7 @@ def lambda_handler(event, context):
         "itemId": itemId,  # camelCase format
         "productName": random.choice(product_names),
         "quantityAvailable": random.randint(0, 1000),
-        "warehouseLocation": random.choice(locations),
+        "warehouseLocation": warehouse_location,
         "lastUpdated": update_date,
         "isInStock": random.choice([True, False]),
         "reorderLevel": random.randint(10, 100),
@@ -93,6 +98,10 @@ TOOL_DEFINITION = {
             "itemId": {
                 "type": "string",
                 "description": "The unique item identifier (e.g., 'ITEM-12345')"
+            },
+            "location": {
+                "type": "string",
+                "description": "The warehouse location (e.g., 'East Warehouse'). If not provided, a random location will be selected."
             }
         },
         "required": ["itemId"]
@@ -103,7 +112,8 @@ if __name__ == "__main__":
     # Test the tool locally
     test_events = [
         {"itemId": "ITEM-12345"},
-        {"itemId": "ITEM-67890"},
+        {"itemId": "ITEM-67890", "location": "East Warehouse"},
+        {"itemId": "ITEM-54321", "location": "Central Distribution"},
         {}  # Test missing itemId
     ]
 
