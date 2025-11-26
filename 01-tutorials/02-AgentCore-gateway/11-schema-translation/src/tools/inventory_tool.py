@@ -15,7 +15,7 @@ def lambda_handler(event, context):
 
     Expected input:
     {
-        "item_id": "ITEM-12345"
+        "itemId": "ITEM-12345"
     }
 
     Returns mock inventory data in camelCase format.
@@ -24,14 +24,14 @@ def lambda_handler(event, context):
 
     # Parse input
     body = event if isinstance(event, dict) else json.loads(event)
-    item_id = body.get('item_id', None)
+    itemId = body.get('itemId', None)
 
-    if not item_id:
+    if not itemId:
         return {
             "statusCode": 400,
             "body": json.dumps({
                 "tool": "inventory_tool",
-                "error": "item_id is required",
+                "error": "itemId is required",
                 "success": False
             })
         }
@@ -49,7 +49,7 @@ def lambda_handler(event, context):
     update_date = (datetime.utcnow() - timedelta(days=days_ago)).isoformat()
     
     inventory_data = {
-        "itemId": item_id,  # camelCase format
+        "itemId": itemId,  # camelCase format
         "productName": random.choice(product_names),
         "quantityAvailable": random.randint(0, 1000),
         "warehouseLocation": random.choice(locations),
@@ -90,21 +90,21 @@ TOOL_DEFINITION = {
     "inputSchema": {
         "type": "object",
         "properties": {
-            "item_id": {
+            "itemId": {
                 "type": "string",
                 "description": "The unique item identifier (e.g., 'ITEM-12345')"
             }
         },
-        "required": ["item_id"]
+        "required": ["itemId"]
     }
 }
 
 if __name__ == "__main__":
     # Test the tool locally
     test_events = [
-        {"item_id": "ITEM-12345"},
-        {"item_id": "ITEM-67890"},
-        {}  # Test missing item_id
+        {"itemId": "ITEM-12345"},
+        {"itemId": "ITEM-67890"},
+        {}  # Test missing itemId
     ]
 
     for test_event in test_events:
