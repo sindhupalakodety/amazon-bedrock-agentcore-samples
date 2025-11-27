@@ -68,17 +68,49 @@ def lambda_handler(event, context):
         "mailing_info": f"{random.randint(100, 9999)} {street}, {city}, MA {random.randint(10000, 99999)}",
         
         # NON-SENSITIVE: Employment status
-        "status": random.choice(['Active', 'On Leave', 'Remote'])
+        "status": random.choice(['Active', 'On Leave', 'Remote']),
+
+        "financial_info": {
+            # SENSITIVE - Will be masked by Guardrails
+            # US_BANK_ACCOUNT_NUMBER - Will be detected by Guardrails
+            "bank_account": f"{random.randint(100000000, 999999999)}",
+            
+            # US_BANK_ROUTING_NUMBER - Will be detected by Guardrails
+            "routing_number": f"{random.randint(100000000, 999999999)}",
+            
+            # CREDIT_DEBIT_CARD_NUMBER - Will be detected by Guardrails
+            "credit_card": f"{random.randint(4000, 4999)}-{random.randint(1000, 9999)}-{random.randint(1000, 9999)}-{random.randint(1000, 9999)}",
+            
+            # CREDIT_DEBIT_CARD_CVV - Will be detected by Guardrails
+            "cvv": f"{random.randint(100, 999)}",
+            
+            # CREDIT_DEBIT_CARD_EXPIRY - Will be detected by Guardrails
+            "card_expiry": f"{random.randint(1, 12):02d}/{random.randint(25, 30)}",
+            
+            # PIN - Will be detected by Guardrails
+            "pin": f"{random.randint(1000, 9999)}",
+            
+            # US_INDIVIDUAL_TAX_IDENTIFICATION_NUMBER - Will be detected by Guardrails
+            "tax_id": f"{random.randint(900, 999)}-{random.randint(70, 99)}-{random.randint(1000, 9999)}",
+            
+            # NON-SENSITIVE - These will NOT be masked
+            "account_balance": round(random.uniform(1000, 50000), 2),
+            "credit_score": random.randint(600, 850),
+            "currency": "USD",
+            "payment_terms": random.choice(['Net 30', 'Net 60', 'Immediate']),
+            "credit_limit": round(random.uniform(5000, 50000), 2),
+            "available_credit": round(random.uniform(1000, 25000), 2)
+        },
     }
 
     response = {
         "statusCode": 200,
-        "body": json.dumps({
+        "body": {
             "tool": "employee_data_tool",
             "result": employee_data,
             "success": True,
             "note": "Sensitive fields (contact_info, mailing_info) will be anonymized by Bedrock Guardrails based on content, not field names."
-        })
+        }
     }
 
     print(f"Employee data tool response generated")
