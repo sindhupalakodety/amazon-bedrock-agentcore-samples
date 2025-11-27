@@ -1,47 +1,93 @@
 """
-PII Masking Interceptor for Gateway MCP RESPONSES
+PII Masking Interceptor for Gateway MCP RESPONSES using Bedrock Guardrails
 
 This Lambda function intercepts Gateway MCP tools/call RESPONSES and masks
-sensitive PII data (like SSN) from customer_data_tool responses.
-It is configured as a RESPONSE interceptor that transforms the tool response.
+sensitive PII data using Amazon Bedrock Guardrails API for ALL tool responses.
+It is configured as a RESPONSE interceptor that transforms any tool response.
 """
 
 import json
+import os
+import boto3
 from typing import Any, Dict
 
-def mask_ssn(data: Any) -> Any:
+# Initialize Bedrock Runtime client
+bedrock_runtime = boto3.client('bedrock-runtime')
+
+# Get Guardrail configuration from environment variables
+GUARDRAIL_ID = os.environ.get('GUARDRAIL_ID')
+GUARDRAIL_VERSION = os.environ.get('GUARDRAIL_VERSION', 'DRAFT')
+
+def mask_pii_with_guardrails(text: str) -> str:
     """
-    Recursively traverse data structure and mask SSN fields.
-    Replaces SSN values with 'XXX-XX-XXXX'.
+    Use Bedrock Guardrails to mask PII in text.
     
     Args:
-        data: Data structure to mask (dict, list, or primitive)
+        text: Text content that may contain PII
     
     Returns:
-        Data structure with masked SSN values
+        Text with PII masked/anonymized by Guardrails
     """
-    if isinstance(data, dict):
-        masked_data = {}
-        for key, value in data.items():      
-            # Check if this is an SSN field
-            if key.lower() == 'ssn':
-                # Mask the SSN value
-                masked_data[key] = 'XXX-XX-XXXX'
-            else:
-                # Recursively mask nested structures
-                masked_data[key] = mask_ssn(value)
-        return masked_data
+    if not GUARDRAIL_ID:
+        print("WARNING: GUARDRAIL_ID not configured, skipping PII masking")
+        return text
     
-    elif isinstance(data, list):
-        return [mask_ssn(item) for item in data]
-    
-    else:
-        # Primitive value, return as-is
-        return data
+    try:
+        # Apply guardrail to the text
+        response = bedrock_runtime.apply_guardrail(
+            guardrailIdentifier=GUARDRAIL_ID,
+            guardrailVersion=GUARDRAIL_VERSION,
+            source='OUTPUT',  # We're filtering output from tools
+            content=[{
+                'text': {
+                    'text': text
+                }
+            }]
+        )
+        
+        # Extract the masked text from the response
+        outputs = response.get('outputs', [])
+        if outputs and len(outputs) > 0:
+            masked_text = outputs[0].get('text', text)
+            
+            # Log PII detection details
+            usage = response.get('usage', {})
+            assessments = response.get('assessments', [])
+            
+            if usage.get('contentPolicyUnits', 0) > 0:
+                print(f"PII detected and anonymized by Guardrails")
+                
+                # Log what types of PII were detected
+                if assessments:
+                    for assessment in assessments:
+                        sensitive_info = assessment.get('sensitiveInformationPolicy', {})
+                        pii_entities = sensitive_info.get('piiEntities', [])
+                        if pii_entities:
+                            detected_types = [entity.get('type') for entity in pii_entities]
+                            print(f"  Detected PII types: {', '.join(detected_types)}")
+            
+            return masked_text
+        
+        return text
+        
+    except Exception as e:
+        error_message = str(e)
+        print(f"Error applying Guardrails: {error_message}")
+        print(f"  Guardrail ID: {GUARDRAIL_ID}")
+        print(f"  Guardrail Version: {GUARDRAIL_VERSION}")
+        
+        # Check if it's a validation error about guardrail not existing
+        if 'does not exist' in error_message or 'ValidationException' in error_message:
+            print("  ⚠ The Guardrail ID or version is invalid or doesn't exist")
+            print("  ⚠ Make sure Step 1.3 was run successfully to create the Guardrail")
+            print("  ⚠ Verify the Lambda environment variables are set correctly")
+        
+        # On error, return original text (fail open to avoid blocking)
+        return text
 
-def mask_customer_data_response(response_body: Dict[str, Any]) -> Dict[str, Any]:
+def mask_tool_response(response_body: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Mask PII in customer_data_tool response.
+    Mask PII in any tool response using Bedrock Guardrails.
     
     Args:
         response_body: MCP JSON-RPC response body
@@ -71,10 +117,23 @@ def mask_customer_data_response(response_body: Dict[str, Any]) -> Dict[str, Any]
                     # Parse the inner JSON (the actual body content)
                     body_json = json.loads(outer_json['body'])
                     
-                    # Check if this is from customer_data_tool
-                    if body_json.get('tool') == 'customer_data_tool' and 'result' in body_json:
-                        # Apply masking to the result
-                        body_json['result'] = mask_ssn(body_json['result'])
+                    # Apply masking to any tool response that has a 'result' field
+                    if 'result' in body_json:
+                        tool_name = body_json.get('tool', 'unknown')
+                        print(f"Applying PII masking to tool: {tool_name}")
+                        
+                        # Convert result to string for Guardrails processing
+                        result_text = json.dumps(body_json['result'])
+                        
+                        # Apply Bedrock Guardrails to mask PII
+                        masked_text = mask_pii_with_guardrails(result_text)
+                        
+                        # Parse the masked text back to JSON
+                        try:
+                            body_json['result'] = json.loads(masked_text)
+                        except json.JSONDecodeError:
+                            # If Guardrails returns non-JSON text, wrap it
+                            body_json['result'] = {'masked_data': masked_text}
                         
                         # Update the body with masked data
                         outer_json['body'] = json.dumps(body_json)
@@ -82,7 +141,7 @@ def mask_customer_data_response(response_body: Dict[str, Any]) -> Dict[str, Any]
                         # Update the text with the updated outer JSON
                         masked_response['result']['content'][i]['text'] = json.dumps(outer_json)
                         
-                        print("PII masking completed")
+                        print(f"PII masking completed for tool: {tool_name}")
             
             except json.JSONDecodeError as e:
                 print(f"Error parsing JSON: {e}")
@@ -93,6 +152,8 @@ def mask_customer_data_response(response_body: Dict[str, Any]) -> Dict[str, Any]
 def lambda_handler(event, context):
     """
     Main Lambda handler for Gateway RESPONSE interceptor.
+    
+    This handler applies PII masking to ALL tool responses using Bedrock Guardrails.
     
     Expected event structure (from Gateway RESPONSE for tools/call):
     {
@@ -108,7 +169,7 @@ def lambda_handler(event, context):
                         "content": [
                             {
                                 "type": "text",
-                                "text": "{...customer data with SSN...}"
+                                "text": "{...tool data with potential PII...}"
                             }
                         ]
                     }
@@ -119,7 +180,7 @@ def lambda_handler(event, context):
         }
     }
     
-    Returns transformed response with masked PII.
+    Returns transformed response with masked PII for any tool.
     """
     print(f"PII Masking Interceptor - Received event: {json.dumps(event, default=str)}")
     
@@ -146,27 +207,24 @@ def lambda_handler(event, context):
             tool_name = params.get('name', '')
             
             print(f"Tool called: {tool_name}")
+            print("Applying PII masking to tool response...")
             
-            # Check if this is customer_data_tool
-            if 'customer_data_tool' in tool_name:
-                print("Customer data tool detected, applying PII masking...")
-                
-                # Mask PII in the response
-                masked_body = mask_customer_data_response(response_body)
-                
-                print(f"Masked response body: {json.dumps(masked_body, default=str)}")
-                
-                # Return transformed response
-                return {
-                    "interceptorOutputVersion": "1.0",
-                    "mcp": {
-                        "transformedGatewayResponse": {
-                            "headers": response_headers,
-                            "body": masked_body,
-                            "statusCode": status_code
-                        }
+            # Mask PII in the response for any tool
+            masked_body = mask_tool_response(response_body)
+            
+            print(f"Masked response body: {json.dumps(masked_body, default=str)}")
+            
+            # Return transformed response
+            return {
+                "interceptorOutputVersion": "1.0",
+                "mcp": {
+                    "transformedGatewayResponse": {
+                        "headers": response_headers,
+                        "body": masked_body,
+                        "statusCode": status_code
                     }
                 }
+            }
         
         # Pass through unchanged for non-customer-data responses
         return {
